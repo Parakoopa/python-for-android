@@ -2,9 +2,6 @@ package org.kivy.android;
 
 import android.os.SystemClock;
 
-import android.view.KeyEvent;
-import android.content.DialogInterface;
-import android.app.AlertDialog;
 import java.io.InputStream;
 import java.io.File;
 import java.io.IOException;
@@ -27,11 +24,18 @@ import android.widget.ImageView;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.view.KeyEvent;
+import android.content.DialogInterface;
+import android.app.AlertDialog;
+import android.view.WindowManager;
+import android.view.Window;
+import android.net.Uri;
 
 import android.widget.AbsoluteLayout;
 import android.view.ViewGroup.LayoutParams;
 
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
 import org.renpy.android.ResourceManager;
@@ -92,8 +96,12 @@ public class PythonActivity extends Activity {
         resourceManager = new ResourceManager(this);
         super.onCreate(savedInstanceState);
 
+        Window window = getWindow();
+        window.getDecorView().setBackgroundColor(Color.parseColor("#2f343f"));
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.setStatusBarColor(Color.parseColor("#262b35"));
+
         this.mActivity = this;
-        this.showLoadingScreen();
         new UnpackFilesTask().execute(getAppRoot());
     }
 
@@ -159,10 +167,28 @@ public class PythonActivity extends Activity {
             mWebView.loadUrl("file:///" + app_root_dir + "/_load.html");
 
             mWebView.setLayoutParams(new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
+            mWebView.getSettings().setSupportMultipleWindows(true);
             mWebView.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView view, String url) {
                         view.loadUrl(url);
+                        return false;
+                    }
+                    @Override
+                    public void onPageFinished (WebView view, String url) {
+                        view.clearHistory();
+                    }
+                });
+            mWebView.setWebChromeClient(new WebChromeClient() {
+                    // Open target="_blank" in browser
+                    @Override
+                    public boolean onCreateWindow(WebView view, boolean dialog, boolean userGesture, android.os.Message resultMsg)
+                    {
+                        WebView.HitTestResult result = view.getHitTestResult();
+                        String data = result.getExtra();
+                        Context context = view.getContext();
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(data));
+                        context.startActivity(browserIntent);
                         return false;
                     }
                 });
@@ -262,74 +288,6 @@ public class PythonActivity extends Activity {
 
         lastBackClick = SystemClock.elapsedRealtime();
         return super.onKeyDown(keyCode, event);
-    }
-
-    // loading screen implementation
-    public static ImageView mImageView = null;
-    public void removeLoadingScreen() {
-      runOnUiThread(new Runnable() {
-        public void run() {
-          if (PythonActivity.mImageView != null &&
-                  PythonActivity.mImageView.getParent() != null) {
-            ((ViewGroup)PythonActivity.mImageView.getParent()).removeView(
-            PythonActivity.mImageView);
-            PythonActivity.mImageView = null;
-          }
-        }
-      });
-    }
-
-    protected void showLoadingScreen() {
-      // load the bitmap
-      // 1. if the image is valid and we don't have layout yet, assign this bitmap
-      // as main view.
-      // 2. if we have a layout, just set it in the layout.
-      // 3. If we have an mImageView already, then do nothing because it will have
-      // already been made the content view or added to the layout.
-
-      if (mImageView == null) {
-        int presplashId = this.resourceManager.getIdentifier("presplash", "drawable");
-        InputStream is = this.getResources().openRawResource(presplashId);
-        Bitmap bitmap = null;
-        try {
-          bitmap = BitmapFactory.decodeStream(is);
-        } finally {
-          try {
-            is.close();
-          } catch (IOException e) {};
-        }
-
-        mImageView = new ImageView(this);
-        mImageView.setImageBitmap(bitmap);
-
-        /*
-     * Set the presplash loading screen background color
-         * https://developer.android.com/reference/android/graphics/Color.html
-         * Parse the color string, and return the corresponding color-int.
-         * If the string cannot be parsed, throws an IllegalArgumentException exception.
-         * Supported formats are: #RRGGBB #AARRGGBB or one of the following names:
-         * 'red', 'blue', 'green', 'black', 'white', 'gray', 'cyan', 'magenta', 'yellow',
-         * 'lightgray', 'darkgray', 'grey', 'lightgrey', 'darkgrey', 'aqua', 'fuchsia',
-         * 'lime', 'maroon', 'navy', 'olive', 'purple', 'silver', 'teal'.
-         */
-        String backgroundColor = resourceManager.getString("presplash_color");
-        if (backgroundColor != null) {
-          try {
-            mImageView.setBackgroundColor(Color.parseColor(backgroundColor));
-          } catch (IllegalArgumentException e) {}
-        }
-        mImageView.setLayoutParams(new ViewGroup.LayoutParams(
-        ViewGroup.LayoutParams.FILL_PARENT,
-        ViewGroup.LayoutParams.FILL_PARENT));
-        mImageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-
-      }
-
-      if (mLayout == null) {
-        setContentView(mImageView);
-      } else if (PythonActivity.mImageView.getParent() == null){
-        mLayout.addView(mImageView);
-      }
     }
 
     //----------------------------------------------------------------------------
