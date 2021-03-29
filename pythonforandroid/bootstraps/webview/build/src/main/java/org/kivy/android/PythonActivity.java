@@ -30,13 +30,29 @@ import android.app.AlertDialog;
 import android.view.WindowManager;
 import android.view.Window;
 import android.net.Uri;
+import android.os.Build;
+
+import android.Manifest;
+import android.app.DownloadManager;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.webkit.CookieManager;
+import android.webkit.URLUtil;
+import android.widget.Toast;
 
 import android.widget.AbsoluteLayout;
 import android.view.ViewGroup.LayoutParams;
 
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
+import android.webkit.DownloadListener;
 import android.webkit.WebView;
+import android.webkit.ValueCallback;
+import android.webkit.JsResult;
 
 import org.renpy.android.ResourceManager;
 
@@ -45,6 +61,7 @@ public class PythonActivity extends Activity {
     // PythonActivity in the SDL2 bootstrap, but removing all the SDL2
     // specifics.
 
+    private static final int CODE_UPLOAD = 9990;
     private static final String TAG = "PythonActivity";
 
     public static PythonActivity mActivity = null;
@@ -54,6 +71,8 @@ public class PythonActivity extends Activity {
 
     protected static ViewGroup mLayout;
     protected static WebView mWebView;
+    protected static ValueCallback<Uri[]> mFilePathCallback;
+    protected static ValueCallback mUploadMessage;
 
     protected static Thread mPythonThread;
 
@@ -158,9 +177,20 @@ public class PythonActivity extends Activity {
                return;
             }
 
+            //Runtime External storage permission for saving download files
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        == PackageManager.PERMISSION_DENIED) {
+                    Log.d("permission", "permission denied to WRITE_EXTERNAL_STORAGE - requesting it");
+                    String[] permissions = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
+                    requestPermissions(permissions, CODE_UPLOAD);
+                }
+            }
+
             // Set up the webview
             String app_root_dir = getAppRoot();
 
+            WebView.setWebContentsDebuggingEnabled(true);
             mWebView = new WebView(PythonActivity.mActivity);
             mWebView.getSettings().setJavaScriptEnabled(true);
             mWebView.getSettings().setDomStorageEnabled(true);
@@ -191,7 +221,108 @@ public class PythonActivity extends Activity {
                         context.startActivity(browserIntent);
                         return false;
                     }
+
+                    // FILE CHOOSER
+
+                    /**
+                     * This is the method used by Android 5.0+ to upload files towards a web form in a Webview
+                     *
+                     * @param webView
+                     * @param filePathCallback
+                     * @param fileChooserParams
+                     * @return
+                     */
+                    @Override
+                    public boolean onShowFileChooser(
+                            WebView webView, ValueCallback<Uri[]> filePathCallback,
+                            WebChromeClient.FileChooserParams fileChooserParams) {
+
+                        if (mFilePathCallback != null) {
+                            mFilePathCallback.onReceiveValue(null);
+                        }
+                        mFilePathCallback = filePathCallback;
+                        startActivityForResult(fileChooserParams.createIntent(), CODE_UPLOAD);
+
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                        Log.d("LogTag", message);
+                        result.confirm();
+                        return true;
+                    }
+
+                    /**
+                     * Despite that there is not a Override annotation, this method overrides the open file
+                     * chooser function present in Android 3.0+
+                     *
+                     * @param uploadMsg
+                     * @author Tito_Leiva
+                     */
+                    public void openFileChooser(ValueCallback<Uri> uploadMsg) {
+                        mUploadMessage = uploadMsg;
+                        Intent i = getGalleryIntent("*/*");
+                        i.addCategory(Intent.CATEGORY_OPENABLE);
+                        startActivityForResult(Intent.createChooser(i, "Select ROM"), CODE_UPLOAD);
+
+                    }
+
+                    public void openFileChooser(ValueCallback uploadMsg, String acceptType) {
+                        mUploadMessage = uploadMsg;
+                        Intent i = getGalleryIntent(acceptType);
+                        i.addCategory(Intent.CATEGORY_OPENABLE);
+                        startActivityForResult(
+                                Intent.createChooser(i, "Select ROM"), CODE_UPLOAD);
+                    }
+
+                    /**
+                     * Despite that there is not a Override annotation, this method overrides the open file
+                     * chooser function present in Android 4.1+
+                     *
+                     * @param uploadMsg
+                     * @author Tito_Leiva
+                     */
+                    public void openFileChooser(ValueCallback<Uri> uploadMsg, String acceptType, String capture) {
+                        mUploadMessage = uploadMsg;
+                        Intent i = getGalleryIntent(acceptType);
+                        startActivityForResult(Intent.createChooser(i, "Select ROM"), CODE_UPLOAD);
+
+                    }
+
+                    private Intent getGalleryIntent(String type) {
+                        // Filesystem.
+                        final Intent galleryIntent = new Intent();
+                        galleryIntent.setType(type);
+                        galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                        galleryIntent.setAction(Intent.ACTION_GET_CONTENT);
+
+                        return galleryIntent;
+                    }
+
+                    // END FILE CHOOSER
+
                 });
+            mWebView.setDownloadListener(new DownloadListener() {
+                @Override
+                public void onDownloadStart(String url, String userAgent,
+                                                String contentDisposition, String mimeType,
+                                                long contentLength) {
+                    DownloadManager.Request request = new DownloadManager.Request(
+                            Uri.parse(url));
+                    request.setMimeType(mimeType);
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    request.setDescription("Downloading ROM...");
+                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(
+                            Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(
+                                    url, contentDisposition, mimeType));
+                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    dm.enqueue(request);
+                    Toast.makeText(getApplicationContext(), "ROM was saved to your 'Downloads' directory.", Toast.LENGTH_LONG).show();
+                }
+            });
             mLayout = new AbsoluteLayout(PythonActivity.mActivity);
             mLayout.addView(mWebView);
 
@@ -349,6 +480,7 @@ public class PythonActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        processFileChooserActivityResult(requestCode, resultCode, intent);
         if ( this.activityResultListeners == null )
             return;
         this.onResume();
@@ -356,6 +488,38 @@ public class PythonActivity extends Activity {
             Iterator<ActivityResultListener> iterator = this.activityResultListeners.iterator();
             while ( iterator.hasNext() )
                 (iterator.next()).onActivityResult(requestCode, resultCode, intent);
+        }
+    }
+
+    protected void processFileChooserActivityResult(int requestCode, int resultCode, Intent intent) {
+        if (requestCode == CODE_UPLOAD) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                if (resultCode == RESULT_OK) {
+                    if (null == mUploadMessage) {
+                        super.onActivityResult(requestCode, resultCode, intent);
+                        return;
+                    }
+
+                    Uri selectedImageUri;
+
+                    mUploadMessage.onReceiveValue(intent.getData());
+                } else {
+                    mUploadMessage.onReceiveValue(null);
+                }
+                mUploadMessage = null;
+
+                return;
+            } else {
+                if (resultCode == RESULT_OK) {
+                    Log.i(TAG, "Request Code " + String.valueOf(requestCode) + " Result Code " + String.valueOf(resultCode) + ": " + WebChromeClient.FileChooserParams.parseResult(resultCode, intent)[0].toString());
+                    mFilePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, intent));
+                } else {
+                    mFilePathCallback.onReceiveValue(null);
+                }
+                mFilePathCallback = null;
+
+                return;
+            }
         }
     }
 
