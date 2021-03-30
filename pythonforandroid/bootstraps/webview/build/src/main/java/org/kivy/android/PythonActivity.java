@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ArrayList;
+import java.lang.System;
 
 import android.view.ViewGroup;
 import android.app.Activity;
@@ -194,6 +195,10 @@ public class PythonActivity extends Activity {
             mWebView = new WebView(PythonActivity.mActivity);
             mWebView.getSettings().setJavaScriptEnabled(true);
             mWebView.getSettings().setDomStorageEnabled(true);
+            mWebView.getSettings().setAppCacheEnabled(true);
+            mWebView.getSettings().setAllowContentAccess(true);
+            mWebView.getSettings().setAllowFileAccess(true);
+            mWebView.getSettings().setBlockNetworkImage(false);
             mWebView.loadUrl("file:///" + app_root_dir + "/_load.html");
 
             mWebView.setLayoutParams(new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
@@ -340,6 +345,7 @@ public class PythonActivity extends Activity {
             PythonActivity.nativeSetenv("PYTHONHOME", app_root_dir);
             PythonActivity.nativeSetenv("PYTHONPATH", app_root_dir + ":" + app_root_dir + "/lib");
             PythonActivity.nativeSetenv("PYTHONOPTIMIZE", "2");
+            PythonActivity.nativeSetenv("SKYTEMPLE_ARMIPS_EXEC", getApplicationInfo().nativeLibraryDir + "/libarmips.so");
 
             try {
                 Log.v(TAG, "Access to our meta-data...");
