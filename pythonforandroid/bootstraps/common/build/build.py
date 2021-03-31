@@ -396,7 +396,7 @@ main.py that loads it.''')
         arch_dict = {"x86_64": "9", "arm64-v8a": "8", "armeabi-v7a": "7", "x86": "6"}
         arch_code = arch_dict.get(arch, '1')
         min_sdk = args.min_sdk_version
-        for i in args.version.split('.'):
+        for i in args.version.split('.')[0:3]:
             version_code *= 100
             version_code += int(i)
         args.numeric_version = "{}{}{}".format(arch_code, min_sdk, version_code)
