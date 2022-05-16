@@ -45,7 +45,7 @@ def recursively_include(results, directory, patterns):
 
 recursively_include(package_data, 'pythonforandroid/recipes',
                     ['*.patch', 'Setup*', '*.pyx', '*.py', '*.c', '*.h',
-                     '*.mk', '*.jam', ])
+                     '*.mk', '*.jam', '*.diff', ])
 recursively_include(package_data, 'pythonforandroid/bootstraps',
                     ['*.properties', '*.xml', '*.java', '*.tmpl', '*.txt', '*.png',
                      '*.mk', '*.c', '*.h', '*.py', '*.sh', '*.jpg', '*.aidl',
@@ -103,6 +103,7 @@ setup(name='python-for-android',
           'distutils.commands': [
               'apk = pythonforandroid.bdistapk:BdistAPK',
               'aar = pythonforandroid.bdistapk:BdistAAR',
+              'aab = pythonforandroid.bdistapk:BdistAAB',
               ],
           },
       classifiers=[

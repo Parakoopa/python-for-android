@@ -213,7 +213,8 @@ class Recipe(with_metaclass(RecipeMeta)):
             while True:
                 try:
                     # jqueryui.com returns a 403 w/ the default user agent
-                    url_opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+                    # Mozilla/5.0 doesnt handle redirection for liblzma
+                    url_opener.addheaders = [('User-agent', 'Wget/1.0')]
                     urlretrieve(url, target, report_hook)
                 except OSError as e:
                     attempts += 1
@@ -727,7 +728,7 @@ class Recipe(with_metaclass(RecipeMeta)):
             if recipe_file is not None:
                 break
 
-        if not recipe_file:
+        else:
             raise ValueError('Recipe does not exist: {}'.format(name))
 
         mod = import_recipe('pythonforandroid.recipes.{}'.format(name), recipe_file)
@@ -817,7 +818,7 @@ class NDKRecipe(Recipe):
         env = self.get_recipe_env(arch)
         with current_directory(self.get_build_dir(arch.arch)):
             shprint(
-                sh.ndk_build,
+                sh.Command(join(self.ctx.ndk_dir, "ndk-build")),
                 'V=1',
                 'NDK_DEBUG=' + ("1" if self.ctx.build_as_debuggable else "0"),
                 'APP_PLATFORM=android-' + str(self.ctx.ndk_api),
@@ -948,7 +949,7 @@ class PythonRecipe(Recipe):
 
     def should_build(self, arch):
         name = self.folder_name
-        if self.ctx.has_package(name):
+        if self.ctx.has_package(name, arch):
             info('Python package already exists in site-packages')
             return False
         info('{} apparently isn\'t already in site-packages'.format(name))
@@ -975,7 +976,7 @@ class PythonRecipe(Recipe):
         hpenv = env.copy()
         with current_directory(self.get_build_dir(arch.arch)):
             shprint(hostpython, 'setup.py', 'install', '-O2',
-                    '--root={}'.format(self.ctx.get_python_install_dir()),
+                    '--root={}'.format(self.ctx.get_python_install_dir(arch.arch)),
                     '--install-lib=.',
                     _env=hpenv, *self.setup_extra_args)
 
@@ -1141,7 +1142,6 @@ class CythonRecipe(PythonRecipe):
         env['LDSHARED'] = env['CC'] + ' -shared'
         # shprint(sh.whereis, env['LDSHARED'], _env=env)
         env['LIBLINK'] = 'NOTNONE'
-        env['NDKPLATFORM'] = self.ctx.ndk_platform
         if self.ctx.copy_libs:
             env['COPYLIBS'] = '1'
 

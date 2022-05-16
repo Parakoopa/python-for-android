@@ -201,6 +201,7 @@ def make_tar(tfn, source_dirs, ignore_path=[], optimize_python=True):
                 dirs.append(d)
                 tinfo = tarfile.TarInfo(d)
                 tinfo.type = tarfile.DIRTYPE
+                clean(tinfo)
                 tf.addfile(tinfo)
 
         # put the file
@@ -266,7 +267,7 @@ main.py that loads it.''')
     # Package up the private data (public not supported).
     use_setup_py = get_dist_info_for("use_setup_py",
                                      error_if_missing=False) is True
-    tar_dirs = [env_vars_tarpath]
+    private_tar_dirs = [env_vars_tarpath]
     _temp_dirs_to_clean = []
     try:
         if args.private:
@@ -276,7 +277,7 @@ main.py that loads it.''')
                     ):
                 print('No setup.py/pyproject.toml used, copying '
                       'full private data into .apk.')
-                tar_dirs.append(args.private)
+                private_tar_dirs.append(args.private)
             else:
                 print("Copying main.py's ONLY, since other app data is "
                       "expected in site-packages.")
@@ -308,12 +309,10 @@ main.py that loads it.''')
                             )
 
                 # Append directory with all main.py's to result apk paths:
-                tar_dirs.append(main_py_only_dir)
-        for python_bundle_dir in ('private', '_python_bundle'):
-            if exists(python_bundle_dir):
-                tar_dirs.append(python_bundle_dir)
+                private_tar_dirs.append(main_py_only_dir)
         if get_bootstrap_name() == "webview":
-            tar_dirs.append('webview_includes')
+            for asset in listdir('webview_includes'):
+                shutil.copy(join('webview_includes', asset), join(assets_dir, asset))
 
         for asset in args.assets:
             asset_src, asset_dest = asset.split(":")
@@ -324,8 +323,13 @@ main.py that loads it.''')
                 shutil.copytree(realpath(asset_src), join(assets_dir, asset_dest))
 
         if args.private or args.launcher:
+            for arch in get_dist_info_for("archs"):
+                libs_dir = f"libs/{arch}"
+                make_tar(
+                    join(libs_dir, 'libpybundle.so'), [f'_python_bundle__{arch}'], args.ignore_path,
+                    optimize_python=args.optimize_python)
             make_tar(
-                join(assets_dir, 'private.mp3'), tar_dirs, args.ignore_path,
+                join(assets_dir, 'private.tar'), private_tar_dirs, args.ignore_path,
                 optimize_python=args.optimize_python)
     finally:
         for directory in _temp_dirs_to_clean:
@@ -340,8 +344,21 @@ main.py that loads it.''')
     default_presplash = 'templates/kivy-presplash.jpg'
     shutil.copy(
         args.icon or default_icon,
-        join(res_dir, 'drawable/icon.png')
+        join(res_dir, 'mipmap/icon.png')
     )
+    if args.icon_fg and args.icon_bg:
+        shutil.copy(args.icon_fg, join(res_dir, 'mipmap/icon_foreground.png'))
+        shutil.copy(args.icon_bg, join(res_dir, 'mipmap/icon_background.png'))
+        with open(join(res_dir, 'mipmap-anydpi-v26/icon.xml'), "w") as fd:
+            fd.write("""<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/icon_background"/>
+    <foreground android:drawable="@mipmap/icon_foreground"/>
+</adaptive-icon>
+""")
+    elif args.icon_fg or args.icon_bg:
+        print("WARNING: Received an --icon_fg or an --icon_bg argument, but not both. "
+              "Ignoring.")
 
     if get_bootstrap_name() != "service_only":
         lottie_splashscreen = join(res_dir, 'raw/splashscreen.json')
@@ -391,15 +408,17 @@ main.py that loads it.''')
 
     version_code = 0
     if not args.numeric_version:
-        # Set version code in format (arch-minsdk-app_version)
-        arch = get_dist_info_for("archs")[0]
-        arch_dict = {"x86_64": "9", "arm64-v8a": "8", "armeabi-v7a": "7", "x86": "6"}
-        arch_code = arch_dict.get(arch, '1')
+        """
+        Set version code in format (10 + minsdk + app_version)
+        Historically versioning was (arch + minsdk + app_version),
+        with arch expressed with a single digit from 6 to 9.
+        Since the multi-arch support, has been changed to 10.
+        """
         min_sdk = args.min_sdk_version
         for i in args.version.split('.')[0:3]:
             version_code *= 100
             version_code += int(i)
-        args.numeric_version = "{}{}{}".format(arch_code, min_sdk, version_code)
+        args.numeric_version = "{}{}{}".format("10", min_sdk, version_code)
 
     if args.intent_filters:
         with open(args.intent_filters) as fd:
@@ -530,6 +549,12 @@ main.py that loads it.''')
         debug_build="debug" in args.build_mode,
         is_library=(get_bootstrap_name() == 'service_library'),
         )
+
+    # gradle properties
+    render(
+        'gradle.tmpl.properties',
+        'gradle.properties',
+        args=args)
 
     # ant build templates
     render(
@@ -668,6 +693,12 @@ tools directory of the Android SDK.
     ap.add_argument('--icon', dest='icon',
                     help=('A png file to use as the icon for '
                           'the application.'))
+    ap.add_argument('--icon-fg', dest='icon_fg',
+                    help=('A png file to use as the foreground of the adaptive icon '
+                          'for the application.'))
+    ap.add_argument('--icon-bg', dest='icon_bg',
+                    help=('A png file to use as the background of the adaptive icon '
+                          'for the application.'))
     ap.add_argument('--service', dest='services', action='append', default=[],
                     help='Declare a new service entrypoint: '
                          'NAME:PATH_TO_PY[:foreground]')
@@ -706,6 +737,10 @@ tools directory of the Android SDK.
                               'topics/manifest/'
                               'activity-element.html'))
 
+    ap.add_argument('--enable-androidx', dest='enable_androidx',
+                    action='store_true',
+                    help=('Enable the AndroidX support library, '
+                          'requires api = 28 or greater'))
     ap.add_argument('--android-entrypoint', dest='android_entrypoint',
                     default=DEFAULT_PYTHON_ACTIVITY_JAVA_CLASS,
                     help='Defines which java class will be used for startup, usually a subclass of PythonActivity')

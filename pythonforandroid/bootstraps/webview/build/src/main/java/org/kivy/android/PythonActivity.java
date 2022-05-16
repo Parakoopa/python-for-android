@@ -130,8 +130,8 @@ public class PythonActivity extends Activity {
         protected String doInBackground(String... params) {
             File app_root_file = new File(params[0]);
             Log.v(TAG, "Ready to unpack");
-            PythonActivityUtil pythonActivityUtil = new PythonActivityUtil(mActivity, resourceManager);
-            pythonActivityUtil.unpackData("private", app_root_file);
+            PythonUtil.unpackAsset(mActivity, "private", app_root_file, true);
+            PythonUtil.unpackPyBundle(mActivity, getApplicationInfo().nativeLibraryDir + "/" + "libpybundle", app_root_file, false);
             return null;
         }
 
@@ -199,7 +199,7 @@ public class PythonActivity extends Activity {
             mWebView.getSettings().setAllowContentAccess(true);
             mWebView.getSettings().setAllowFileAccess(true);
             mWebView.getSettings().setBlockNetworkImage(false);
-            mWebView.loadUrl("file:///" + app_root_dir + "/_load.html");
+            mWebView.loadUrl("file:///android_asset/_load.html");
 
             mWebView.setLayoutParams(new LayoutParams(LayoutParams.FILL_PARENT, LayoutParams.FILL_PARENT));
             mWebView.getSettings().setSupportMultipleWindows(true);
