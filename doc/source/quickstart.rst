@@ -120,7 +120,7 @@ named ``tools``, and you will need to run extra commands to install
 the SDK packages needed. 
 
 For Android NDK, note that modern releases will only work on a 64-bit
-operating system. **The minimal, and recommended, NDK version to use is r19b:**
+operating system. **The minimal, and recommended, NDK version to use is r23b:**
 
  - `Go to ndk downloads page <https://developer.android.com/ndk/downloads/>`_
  - Windows users should create a virtual machine with an GNU Linux os
@@ -154,7 +154,7 @@ variables necessary for building on android::
 
     # Adjust the paths!
     export ANDROIDSDK="$HOME/Documents/android-sdk-27"
-    export ANDROIDNDK="$HOME/Documents/android-ndk-r19b"
+    export ANDROIDNDK="$HOME/Documents/android-ndk-r23b"
     export ANDROIDAPI="27"  # Target API version of your application
     export NDKAPI="21"  # Minimum supported API version of your application
     export ANDROIDNDKVER="r10e"  # Version of the NDK you installed
@@ -212,6 +212,24 @@ You can also replace flask with another web framework.
 
 Replace ``--port=5000`` with the port on which your app will serve a
 website. The default for Flask is 5000.
+
+Exporting the Android App Bundle (aab) for distributing it on Google Play
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Starting from August 2021 for new apps and from November 2021 for updates to existings apps,
+Google Play Console will require the Android App Bundle instead of the long lived apk.
+
+python-for-android handles by itself the needed work to accomplish the new requirements:
+
+    p4a aab --private $HOME/code/myapp --package=org.example.myapp --name="My App" --version 0.1 --bootstrap=sdl2 --requirements=python3,kivy --arch=arm64-v8a --arch=armeabi-v7a --release
+
+This `p4a aab ...` command builds a distribution with `python3`,
+`kivy`, and everything else you specified in the requirements.
+It will be packaged using a SDL2 bootstrap, and produce
+an `.aab` file that contains binaries for both `armeabi-v7a` and `arm64-v8a` ABIs.
+
+The Android App Bundle, is supposed to be used for distributing your app.
+If you need to test it locally, on your device, you can use `bundletool <https://developer.android.com/studio/command-line/bundletool>`
 
 Other options
 ~~~~~~~~~~~~~
